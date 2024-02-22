@@ -13,6 +13,10 @@ import (
 
 const (
 	secureLoginVersion = "0.1.0"
+
+	// This variable is set at build time to determine whether
+	// to serve files from embedded storage or the disk.
+	secureLoginReleaseMode = false
 )
 
 type syncController struct {

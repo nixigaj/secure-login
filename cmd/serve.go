@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/charmbracelet/log"
-	"github.com/nixigaj/secure-login/public"
+	"github.com/nixigaj/secure-login/embed"
 	"github.com/vearutop/statigz"
 	"github.com/vearutop/statigz/brotli"
 	"net"
@@ -15,15 +15,21 @@ import (
 )
 
 func serve(args *Args, sc *syncController) {
-	fileServer := statigz.FileServer(
-		public.Dir,
-		brotli.AddEncoding)
-
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fileServer.ServeHTTP(w, r)
-	})
+	if secureLoginReleaseMode {
+		fileServer := statigz.FileServer(
+			embed.Dir,
+			brotli.AddEncoding,
+			statigz.FSPrefix("dist"))
+
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			fileServer.ServeHTTP(w, r)
+		})
+	} else {
+		mux.Handle("/", http.FileServer(http.Dir("public")))
+	}
+
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		apiHandler(w, r, args)
 	})

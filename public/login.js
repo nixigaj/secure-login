@@ -1,21 +1,27 @@
-console.log("Welcome to login.html")
+console.log("Welcome to login.html");
 
-argon2
-	.hash({
-		pass: 'password',
-		salt: 'passhash'
-	})
-	.then(hash => {
-		document.querySelector('code').innerText =
-			`Encoded: ${hash.encoded}\n` +
-			`Hex: ${hash.hashHex}\n`;
+const pass = 'password';
+const salt = 'passhash';
 
-		argon2
-			.verify({
-				pass: 'password',
-				encoded: hash.encoded
-			})
-			.then(() => document.querySelector('code').innerText += 'Verified OK')
-			.catch(e => console.error('Error: ', e));
-	})
-	.catch(e => console.error('Error: ', e));
+const hashPromise = argon2.hash({ pass: pass, salt: salt });
+hashPromise.then(handleHashSuccess).catch(handleError);
+
+function handleHashSuccess(hash) {
+	const encoded = hash.encoded;
+	const hashHex = hash.hashHex;
+	const codeElement = document.querySelector('code');
+	codeElement.innerText = 'Encoded: ' + encoded + '\n' +
+		'Hex: ' + hashHex + '\n';
+
+	const verifyPromise = argon2.verify({ pass: pass, encoded: encoded });
+	verifyPromise.then(handleVerifySuccess).catch(handleError);
+}
+
+function handleVerifySuccess() {
+	const codeElement = document.querySelector('code');
+	codeElement.innerText += 'Verified OK';
+}
+
+function handleError(e) {
+	console.error('Error: ', e);
+}

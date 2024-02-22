@@ -1,5 +1,10 @@
-# Build directory
-build/
+# Build files
+secure-login
+secure-login.exe
+embed/dist/
+
+# Persistent database
+data.db
 
 # Editors
 .vscode/
