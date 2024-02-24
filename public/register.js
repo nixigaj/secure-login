@@ -1,5 +1,3 @@
-console.log("Welcome to register.html")
-
 const pass = 'password';
 const salt = 'passhash';
 
