@@ -2,8 +2,11 @@
 
 package main
 
-import "github.com/nixigaj/secure-login/internal/build"
+import (
+	"github.com/nixigaj/secure-login/internal/build"
+	"os"
+)
 
 func main() {
-	build.Run()
+	os.Exit(build.Run())
 }
