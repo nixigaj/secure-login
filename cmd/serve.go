@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/charmbracelet/log"
-	"github.com/nixigaj/secure-login/embed"
+	"github.com/nixigaj/secure-login/internal/embed"
 	"github.com/vearutop/statigz"
 	"github.com/vearutop/statigz/brotli"
 	"net"

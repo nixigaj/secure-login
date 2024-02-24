@@ -3,7 +3,7 @@ secure-login
 secure-login.exe
 build
 build.exe
-embed/dist/
+internal/embed/dist/
 
 # Persistent database
 data/

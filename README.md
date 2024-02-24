@@ -10,7 +10,7 @@ This demo demonstrates how to implement secure login on the web with vanilla Jav
 - Regular password authentication
 - Client side initial salted hashing
 - Server side salted hashing
-- Optional TPM-stored server side pepper
+- Optional TPM 2.0-stored server side pepper
 - WebAuthn
 - TOTP
 -
