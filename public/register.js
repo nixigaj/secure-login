@@ -4,7 +4,6 @@ const pass = 'password';
 const salt = 'passhash';
 
 const hashPromise = argon2.hash({ pass: pass, salt: salt });
-console.log(hashPromise)
 hashPromise.then(handleHashSuccess).catch(handleError);
 
 function handleHashSuccess(hash) {

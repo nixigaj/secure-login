@@ -1,10 +1,12 @@
 # Build files
 secure-login
 secure-login.exe
+build
+build.exe
 embed/dist/
 
 # Persistent database
-data.db
+data/
 
 # Editors
 .vscode/

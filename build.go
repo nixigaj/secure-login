@@ -1,13 +1,25 @@
+//go:build ignore
+
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"github.com/alexflint/go-arg"
+	"github.com/andybalholm/brotli"
+	"github.com/tdewolff/minify/v2"
+	"github.com/tdewolff/minify/v2/css"
+	"github.com/tdewolff/minify/v2/html"
+	"github.com/tdewolff/minify/v2/js"
+	"github.com/tdewolff/minify/v2/svg"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
+	"strings"
 )
 
 const (
@@ -20,8 +32,10 @@ var (
 	generatedFilesFolders = []string{
 		"secure-login",
 		"secure-login.exe",
-		"data.db",
-		"embed/dist/",
+		"build",
+		"build.exe",
+		"data/",
+		distDir,
 	}
 
 	distExtensions = []string{
@@ -38,7 +52,17 @@ var (
 		".html",
 		".css",
 	}
+
+	minifier *minify.M
 )
+
+func init() {
+	minifier = minify.New()
+	minifier.AddFunc(".js", js.Minify)
+	minifier.AddFunc(".svg", svg.Minify)
+	minifier.AddFunc(".html", html.Minify)
+	minifier.AddFunc(".css", css.Minify)
+}
 
 func main() {
 	var args struct {
@@ -75,7 +99,10 @@ func build(release bool) error {
 			return fmt.Errorf("frontend bundling: %v", err)
 		}
 	} else {
-		// TODO create dist dir anyways
+		err := genDummyDist()
+		if err != nil {
+			return fmt.Errorf("embed directory: %v", err)
+		}
 	}
 
 	files, err := filepath.Glob("cmd/*.go")
@@ -86,8 +113,14 @@ func build(release bool) error {
 	cmdArgs := []string{"build"}
 	if release {
 		cmdArgs = append(cmdArgs, "--ldflags=-s", "--ldflags=-w")
+		cmdArgs = append(cmdArgs, "--ldflags=-X main.secureLoginBuildMode=release")
 	}
-	cmdArgs = append(cmdArgs, "-o", "secure-login")
+	//noinspection GoBoolExpressions
+	if runtime.GOOS == "windows" {
+		cmdArgs = append(cmdArgs, "-o", "secure-login.exe")
+	} else {
+		cmdArgs = append(cmdArgs, "-o", "secure-login")
+	}
 	cmdArgs = append(cmdArgs, files...)
 
 	cmd := exec.Command("go", cmdArgs...)
@@ -96,8 +129,53 @@ func build(release bool) error {
 	return cmd.Run()
 }
 
+func genDummyDist() error {
+	parentDir := filepath.Dir(distDir)
+	parentInfo, err := os.Stat(parentDir)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(distDir, parentInfo.Mode().Perm())
+	if err != nil {
+		return err
+	}
+
+	containsFile, err := dirContainsFile(distDir)
+	if err != nil {
+		return err
+	}
+	if containsFile {
+		return nil
+	}
+
+	file, err := os.Create(filepath.Join(distDir, ".dummy"))
+	if err != nil {
+		return err
+	}
+	err = file.Close()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func genDist() error {
-	err := filepath.Walk(publicDir, func(path string, info os.FileInfo, err error) error {
+	err := os.RemoveAll(distDir)
+	if err != nil {
+		return err
+	}
+	parentDir := filepath.Dir(distDir)
+	parentInfo, err := os.Stat(parentDir)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(distDir, parentInfo.Mode().Perm())
+	if err != nil {
+		return err
+	}
+
+	err = filepath.Walk(publicDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -105,7 +183,11 @@ func genDist() error {
 		destPath := filepath.Join(distDir, path[len(publicDir):])
 
 		if info.IsDir() {
-			err := os.MkdirAll(destPath, os.ModePerm)
+			containsFile, err := dirContainsFile(path)
+			if !containsFile {
+				return nil
+			}
+			err = os.MkdirAll(destPath, parentInfo.Mode().Perm())
 			if err != nil {
 				return err
 			}
@@ -116,27 +198,7 @@ func genDist() error {
 			return nil
 		}
 
-		inFile, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-
-		outFile, err := os.Create(destPath)
-		if err != nil {
-			return err
-		}
-
-		_, err = io.Copy(outFile, inFile)
-		if err != nil {
-			return err
-		}
-
-		err = inFile.Close()
-		if err != nil {
-			return err
-		}
-
-		err = outFile.Close()
+		err = handleDistFile(path, destPath, info.Size(), parentInfo.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -148,6 +210,86 @@ func genDist() error {
 	}
 
 	return nil
+}
+
+func handleDistFile(srcPath string, destPath string, size int64, perm os.FileMode) error {
+	inData, err := os.ReadFile(srcPath)
+	if err != nil {
+		return err
+	}
+
+	ext := filepath.Ext(srcPath)
+	isCompressExtension := slices.Contains(compressExtensions, ext)
+
+	var minData []byte
+	if isCompressExtension && !strings.Contains(srcPath, ".min.") {
+		minData, err = minifier.Bytes(ext, inData)
+		if err != nil {
+			return err
+		}
+	} else {
+		minData = inData
+	}
+
+	err = os.WriteFile(destPath, minData, perm)
+	if err != nil {
+		return err
+	}
+
+	if !(isCompressExtension && size >= compressThreshold) {
+		return nil
+	}
+
+	var gzipData bytes.Buffer
+	gz := gzip.NewWriter(&gzipData)
+	_, err = gz.Write(minData)
+	if err != nil {
+		return err
+	}
+	err = gz.Close()
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(destPath+".gz", gzipData.Bytes(), perm)
+	if err != nil {
+		return err
+	}
+
+	var brotliData bytes.Buffer
+	br := brotli.NewWriter(&brotliData)
+	_, err = br.Write(minData)
+	if err != nil {
+		return err
+	}
+	err = br.Close()
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(destPath+".br", brotliData.Bytes(), perm)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func dirContainsFile(path string) (bool, error) {
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			return io.EOF
+		}
+		return nil
+	})
+	if err == io.EOF {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 func clean() error {

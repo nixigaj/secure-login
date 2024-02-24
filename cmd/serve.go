@@ -14,7 +14,13 @@ import (
 	"time"
 )
 
-func serve(args *Args, sc *syncController) {
+const (
+	// As strict as possible while still allowing
+	// WASM to execute for the client-side hashing.
+	cspHeaderValue = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'"
+)
+
+func serve(args *Args, sc *syncController, tlsMode bool) {
 	mux := http.NewServeMux()
 
 	if secureLoginReleaseMode {
@@ -24,10 +30,14 @@ func serve(args *Args, sc *syncController) {
 			statigz.FSPrefix("dist"))
 
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Security-Policy", cspHeaderValue)
 			fileServer.ServeHTTP(w, r)
 		})
 	} else {
-		mux.Handle("/", http.FileServer(http.Dir("public")))
+		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Security-Policy", cspHeaderValue)
+			http.FileServer(http.Dir("public")).ServeHTTP(w, r)
+		})
 	}
 
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
@@ -43,24 +53,28 @@ func serve(args *Args, sc *syncController) {
 		Handler: mux,
 	}
 
-	log.Infof("HTTP listening on %s", addr)
-
 	go func() {
-		err := srv.ListenAndServe()
+		var err error
+		if tlsMode {
+			log.Infof("Listening on https://%s", addr)
+			err = srv.ListenAndServeTLS(*args.TlsCert, *args.TlsKey)
+		} else {
+			log.Infof("Listening on http://%s", addr)
+			err = srv.ListenAndServe()
+		}
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			sc.fatalChan <- fmt.Errorf("HTTP server startup: %v", err)
 		}
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-
 	<-sc.stopChan
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	err := srv.Shutdown(ctx)
 	if err != nil {
 		log.Errorf("HTTP stutdown: %v", err)
 	}
-	cancel()
 
 	sc.wg.Done()
 }

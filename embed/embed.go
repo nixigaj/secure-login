@@ -1,5 +1,3 @@
-// This directory is filled with minified and compressed
-
 package embed
 
 import "embed"
