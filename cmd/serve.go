@@ -6,8 +6,7 @@ import (
 	"fmt"
 	"github.com/charmbracelet/log"
 	"github.com/nixigaj/secure-login/internal/embed"
-	"github.com/vearutop/statigz"
-	"github.com/vearutop/statigz/brotli"
+	"github.com/nixigaj/secure-login/internal/fileserver"
 	"net"
 	"net/http"
 	"strings"
@@ -18,24 +17,34 @@ const (
 	// As strict as possible while still allowing
 	// WASM to execute for the client-side hashing.
 	cspHeaderValue = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'"
+
+	// Is only set if TLS mode is active.
+	serverHeaderValue = "Secure login demo"
 )
 
 func serve(args *Args, sc *syncController, tlsMode bool) {
 	mux := http.NewServeMux()
 
 	if secureLoginReleaseMode {
-		fileServer := statigz.FileServer(
-			embed.Dir,
-			brotli.AddEncoding,
-			statigz.FSPrefix("dist"))
+		fileServer := fileserver.New(embed.Dir, "dist")
 
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Security-Policy", cspHeaderValue)
+			if !args.DisableCSP {
+				w.Header().Set("Content-Security-Policy", cspHeaderValue)
+			}
+			if tlsMode {
+				w.Header().Set("Server", serverHeaderValue)
+			}
 			fileServer.ServeHTTP(w, r)
 		})
 	} else {
 		mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Security-Policy", cspHeaderValue)
+			if !args.DisableCSP {
+				w.Header().Set("Content-Security-Policy", cspHeaderValue)
+			}
+			if tlsMode {
+				w.Header().Set("Server", serverHeaderValue)
+			}
 			http.FileServer(http.Dir("public")).ServeHTTP(w, r)
 		})
 	}

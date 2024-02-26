@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/alexflint/go-arg"
 	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 	"github.com/tdewolff/minify/v2"
 	"github.com/tdewolff/minify/v2/css"
 	"github.com/tdewolff/minify/v2/html"
@@ -196,7 +197,7 @@ func genDist() error {
 			return nil
 		}
 
-		err = handleDistFile(path, destPath, info.Size(), parentInfo.Mode().Perm())
+		err = handleDistFile(path, destPath, parentInfo.Mode().Perm())
 		if err != nil {
 			return err
 		}
@@ -210,7 +211,7 @@ func genDist() error {
 	return nil
 }
 
-func handleDistFile(srcPath string, destPath string, size int64, perm os.FileMode) error {
+func handleDistFile(srcPath string, destPath string, perm os.FileMode) error {
 	inData, err := os.ReadFile(srcPath)
 	if err != nil {
 		return err
@@ -234,7 +235,7 @@ func handleDistFile(srcPath string, destPath string, size int64, perm os.FileMod
 		return err
 	}
 
-	if !(isCompressExtension && size >= compressThreshold) {
+	if !(isCompressExtension && len(minData) >= compressThreshold) {
 		return nil
 	}
 
@@ -264,6 +265,24 @@ func handleDistFile(srcPath string, destPath string, size int64, perm os.FileMod
 		return err
 	}
 	err = os.WriteFile(destPath+".br", brotliData.Bytes(), perm)
+	if err != nil {
+		return err
+	}
+
+	var zstData bytes.Buffer
+	zst, err := zstd.NewWriter(&zstData)
+	if err != nil {
+		return err
+	}
+	_, err = zst.Write(minData)
+	if err != nil {
+		return err
+	}
+	err = zst.Close()
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(destPath+".zst", zstData.Bytes(), perm)
 	if err != nil {
 		return err
 	}

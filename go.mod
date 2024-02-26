@@ -6,8 +6,8 @@ require (
 	github.com/alexflint/go-arg v1.4.3
 	github.com/andybalholm/brotli v1.1.0
 	github.com/charmbracelet/log v0.3.1
+	github.com/klauspost/compress v1.17.7
 	github.com/tdewolff/minify/v2 v2.20.18
-	github.com/vearutop/statigz v1.4.0
 )
 
 require (
