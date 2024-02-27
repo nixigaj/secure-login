@@ -60,11 +60,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleFile(w http.ResponseWriter, path string, mime string, enc string) {
 	file, err := s.fs.Open(path)
-	if errors.Is(fs.ErrInvalid, err) {
+	if errors.Is(err, fs.ErrInvalid) {
 		http.Error(w, "500 bad request", http.StatusBadRequest)
 		return
 	}
-	if errors.Is(fs.ErrInvalid, err) {
+	if errors.Is(err, fs.ErrNotExist) {
 		http.Error(w, "404 page not found", http.StatusNotFound)
 		return
 	}
